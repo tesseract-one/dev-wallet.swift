@@ -12,16 +12,6 @@ import Substrate
 import SubstrateKeychain
 import ScaleCodec
 
-extension SubstrateAccountType {
-    public var name: String {
-        switch self {
-        case .sr25519: return "Sr25519"
-        case .ed25519: return "Ed25519"
-        case .ecdsa: return "ECDSA"
-        }
-    }
-}
-
 class WalletSubstrateService: SubstrateService {    
     private let model: SignerViewModel
     private let settings: KeySettingsProvider
@@ -34,35 +24,25 @@ class WalletSubstrateService: SubstrateService {
     func getAccount(
         type: SubstrateAccountType
     ) async -> Result<SubstrateGetAccountResponse, TesseractError> {
-        await getKeyPair(type: type)
-            .flatMap { kp in
-                Result { try kp.pubKey.ss58(format: .substrate) }
-                    .mapError { .swift(error: $0 as NSError) }
-                    .map { (kp, $0) }
+        await getKeyPair(type: type, path: "").asyncFlatMap { (kp, account) in
+            let request = SubstrateAccount(algorithm: type.name,
+                                           path: "",
+                                           key: account)
+            return await model.confirm(request: .substrateAccount(request)).flatMap {
+                $0 ? .success(kp.pubKey) : .failure(.cancelled)
             }
-            .asyncFlatMap { (kp, account) in
-                let request = SubstrateAccount(algorithm: type.name,
-                                               path: "",
-                                               key: account)
-                return await model.confirm(request: .substrateAccount(request)).map {
-                    $0 ? kp.pubKey : nil
-                }
-            }
-            .flatMap { (pubKey: (any PublicKey)?) in
-                guard let pubKey = pubKey else { return .failure(.cancelled) }
-                return .success(SubstrateGetAccountResponse(pubKey: pubKey.raw, path: ""))
-            }
+        }.map { SubstrateGetAccountResponse(pubKey: $0.raw, path: "") }
     }
     
     func signTransation(
         type: SubstrateAccountType, path: String,
         extrinsic: Data, metadata: Data, types: Data
     ) async -> Result<Data, TesseractError> {
-        await parseExtrinsic(extrinsic: extrinsic, metadata: metadata, types: types).flatMap { ext in
-            getKeyPair(type: type).flatMap { kp in
-                Result { try kp.pubKey.ss58(format: .substrate) }
-                    .mapError { .swift(error: $0 as NSError) }
-                    .map { (kp: kp, ext: ext, acc: $0) }
+        await parseExtrinsic(
+            extrinsic: extrinsic, metadata: metadata, types: types
+        ).flatMap { ext in
+            getKeyPair(type: type, path: path).map {
+                (kp: $0.kp, ext: ext, acc: $0.acc)
             }
         }.asyncFlatMap { info in
             let ext = """
@@ -71,34 +51,51 @@ class WalletSubstrateService: SubstrateService {
             additional: \(info.ext.add)
             """
             let request = SubstrateSign(algorithm: type.name,
-                                        path: "", key: info.acc,
+                                        path: path, key: info.acc,
                                         data: ext)
-            return await model.confirm(request: .substrateSign(request)).map {
-                $0 ? info.kp : nil
+            return await model.confirm(request: .substrateSign(request)).flatMap {
+                $0 ? .success(info.kp) : .failure(.cancelled)
             }
-        }.flatMap { (kp: (any KeyPair)?) in
-            kp.map { .success($0.sign(message: extrinsic).raw) } ?? .failure(.cancelled)
+        }.map { $0.sign(message: extrinsic).raw }
+    }
+}
+
+extension SubstrateAccountType {
+    var name: String {
+        switch self {
+        case .sr25519: return "Sr25519"
+        case .ed25519: return "Ed25519"
+        case .ecdsa: return "ECDSA"
         }
     }
-    
-    private func getKeyPair(type: SubstrateAccountType) -> Result<KeyPair, TesseractError> {
+}
+
+private extension WalletSubstrateService {
+    func getKeyPair(
+        type: SubstrateAccountType, path: String
+    ) -> Result<(kp: KeyPair, acc: String), TesseractError> {
         let settings: KeySettings
         do {
             settings = try self.settings.load()
-            let seed = try Data(Mnemonic(
+            let seed = try Mnemonic(
                 mnemonic: settings.mnemonic.components(separatedBy: " ")
-            ).substrate_seed())
+            ).substrate_seed()
+            var kp: KeyPair & KeyDerivable
             switch type {
-            case .sr25519: return try .success(Sr25519KeyPair(seed: seed))
-            case .ed25519: return try .success(Ed25519KeyPair(seed: seed))
-            case .ecdsa: return try .success(EcdsaKeyPair(seed: seed))
+            case .sr25519: kp = try Sr25519KeyPair(seed: Data(seed))
+            case .ed25519: kp = try Ed25519KeyPair(seed: Data(seed))
+            case .ecdsa: kp = try EcdsaKeyPair(seed: Data(seed))
             }
+            if path != "" {
+                kp = try kp.derive(path: [PathComponent(string: path)])
+            }
+            return try .success((kp: kp, acc: kp.pubKey.ss58(format: .substrate)))
         } catch {
             return .failure(.swift(error: error as NSError))
         }
     }
     
-    private func parseExtrinsic(
+    func parseExtrinsic(
         extrinsic: Data, metadata: Data, types: Data
     ) -> Result<(call: Value<TypeDefinition>,
                  extra: [Value<TypeDefinition>],

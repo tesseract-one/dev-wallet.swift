@@ -236,6 +236,7 @@
 				650A8EF32984698F00489BE2 /* UIExtension */,
 				6585D2C72984C2A4008D4A7F /* UI */,
 				6585D2AB2984A625008D4A7F /* SignerError.swift */,
+				6585D2A72984945E008D4A7F /* SignerViewModel.swift */,
 				650A8EF12984527D00489BE2 /* SignerExtension.swift */,
 				656A7194297F1EC100FC66CC /* Media.xcassets */,
 				656A719B297F1EC100FC66CC /* Info.plist */,
@@ -315,7 +316,6 @@
 			isa = PBXGroup;
 			children = (
 				6585D2C82984C307008D4A7F /* Request */,
-				6585D2A72984945E008D4A7F /* SignerViewModel.swift */,
 				6585D2A92984A3DD008D4A7F /* SignerView.swift */,
 			);
 			path = UI;
