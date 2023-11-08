@@ -56,7 +56,7 @@ class WalletSubstrateService: SubstrateService {
             return await model.confirm(request: .substrateSign(request)).flatMap {
                 $0 ? .success(info.kp) : .failure(.cancelled)
             }
-        }.map { $0.sign(message: extrinsic).raw }
+        }.map { $0.sign(tx: extrinsic).raw }
     }
 }
 
