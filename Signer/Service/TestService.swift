@@ -17,29 +17,26 @@ class WalletTestService: TestService {
         self.settings = settings
     }
     
-    func signTransation(req: String) async -> Result<String, TesseractError> {
-        let settings: TestSettings
-        do {
-            settings = try self.settings.load()
-        } catch {
-            return .failure(.swift(error: error as NSError))
-        }
+    func signTransation(req: String) async throws -> String {
+        let settings = try self.settings.load()
         
         if (req == settings.invalidator) {
             let error = "Intentional error. Because your transaction `\(req)` is set as the invalidator in DevWallet settings"
             let request = Request.testError(TestError(transaction: req, error: error))
             
-            return await model.confirm(request: request).flatMap {
-                $0 ? .failure(.weird(reason: error)) : .failure(.cancelled)
+            guard try await model.confirm(request: request) else {
+                throw TesseractError.cancelled
             }
+            throw TesseractError.weird(reason: error)
         } else {
             let signature = settings.signature
             let signed = "\(req)#\(signature)"
             let request = Request.testSign(TestSign(transaction: req, signature: signature, result: signed))
             
-            return await model.confirm(request: request).flatMap {
-                $0 ? .success(signed) : .failure(.cancelled)
+            guard try await model.confirm(request: request) else {
+                throw TesseractError.cancelled
             }
+            return signed
         }
     }
 }

@@ -9,29 +9,29 @@ import Foundation
 import TesseractService
 
 class SignerViewModel: ObservableObject {
-    private var continuation: UnsafeContinuation<Result<Bool, TesseractError>, Never>?
+    private var continuation: UnsafeContinuation<Bool, Error>?
     
     @Published var request: Request?
     
     @MainActor
-    func confirm(request: Request) async -> Result<Bool, TesseractError> {
-        if (self.continuation != nil) {
-            return .failure(.swift(error: SignerError.invalidState as NSError))
+    func confirm(request: Request) async throws -> Bool {
+        guard self.continuation == nil else {
+            throw SignerError.invalidState
         }
         
-        return await withUnsafeContinuation { cont in
+        return try await withUnsafeThrowingContinuation { cont in
             self.continuation = cont
             self.request = request
         }
     }
     
     func sign() {
-        self.continuation?.resume(returning: .success(true))
+        self.continuation?.resume(returning: true)
         self.continuation = nil
     }
     
     func cancel() {
-        self.continuation?.resume(returning: .success(false))
+        self.continuation?.resume(returning: false)
         self.continuation = nil
     }
 }
