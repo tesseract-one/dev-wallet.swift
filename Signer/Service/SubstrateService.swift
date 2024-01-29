@@ -12,7 +12,7 @@ import Substrate
 import SubstrateKeychain
 import ScaleCodec
 
-class WalletSubstrateService: SubstrateService {    
+class WalletSubstrateService: SubstrateService {
     private let model: SignerViewModel
     private let settings: KeySettingsProvider
     
@@ -35,7 +35,7 @@ class WalletSubstrateService: SubstrateService {
         return .init(pubKey: kp.pubKey.raw, path: path)
     }
     
-    func signTransation(
+    func signTransaction(
         type: SubstrateAccountType, path: String,
         extrinsic: Data, metadata: Data, types: Data
     ) async throws -> Data {

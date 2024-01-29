@@ -17,7 +17,7 @@ class WalletTestService: TestService {
         self.settings = settings
     }
     
-    func signTransation(req: String) async throws -> String {
+    func signTransaction(req: String) async throws -> String {
         let settings = try self.settings.load()
         
         if (req == settings.invalidator) {
